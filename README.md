@@ -190,3 +190,71 @@ Ask an Altered Re:Union admin with these informations:
 - a `clientId` (public client, PKCE required)
 - Valid Redirect URIs and Web Origins for your app
 - the optional scopes your app needs
+
+---
+
+## 4. Token claims: `pseudo` in the access token
+
+The player's public name is the `pseudo` user attribute (required at signup,
+unique). The realm uses the email as the Keycloak username
+(`registrationEmailAsUsername: true`), so `preferred_username` is **not** a
+public name: never display it.
+
+The `pseudo` protocol mapper lives on the **`profile` client scope**
+(`dev/realm-export.json` → `clientScopes[name=profile].protocolMappers[name=pseudo]`).
+It is added to the ID token, userinfo, introspection **and the access token**
+(`"access.token.claim": "true"`). Resource servers that only read the Bearer
+access token, like the Decks API
+([altered-core-decks-api#63](https://github.com/Altered-Community/altered-core-decks-api/pull/63)),
+need the claim there to show deck authors.
+
+A client only gets `pseudo` if the `profile` scope is in its token: assigned as
+a default client scope, or assigned as optional and requested (`scope=openid profile`).
+
+### Applying it in prod
+
+Use the admin console (one field, applied instantly, reversible). Do **not**
+re-import `dev/realm-export.json` or run a partial import with "Overwrite":
+the export is older than the prod realm and would reset later changes.
+
+1. Admin console → realm **players** → **Client scopes** → **profile** → **Mappers** tab.
+2. Open **pseudo**.
+3. Switch **Add to access token** to **On**. Leave every other toggle as is
+   (ID token On, userinfo On, introspection On, lightweight access token Off).
+4. **Save**.
+
+If a client has its own `pseudo` mapper (Clients → *client* → Client scopes →
+*client*-dedicated → Mappers), apply the same toggle there.
+
+### Side effects
+
+- Tokens already issued keep their claims. New access tokens get `pseudo` on
+  the next login or refresh (access token lifespan: 5 minutes).
+- Token size grows by the length of one short string claim.
+- Every client whose token includes the `profile` scope, and every API that
+  receives those access tokens, now sees `pseudo`. These clients could already
+  read it from the ID token and userinfo.
+- No change to email exposure: the `email`, `preferred_username` and other
+  mappers are untouched.
+
+### Verifying
+
+Print claim **names** only, never values:
+
+```sh
+# ACCESS_TOKEN = a fresh access token (log out and back in first)
+python3 -c 'import sys,json,base64; p=sys.argv[1].split(".")[1]; d=json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4))); print(sorted(d)); print("pseudo present:", "pseudo" in d, "| pseudo has @:", "@" in str(d.get("pseudo","")))' "$ACCESS_TOKEN"
+```
+
+Expected: `pseudo present: True | pseudo has @: False`.
+
+Then make one authenticated call to the Decks API with that token (for
+example `GET /api/decks?itemsPerPage=1`) so it stores the pseudo, and check the
+public list:
+
+```sh
+curl -s 'https://decks.alteredcore.org/api/decks/public?itemsPerPage=100' \
+  | python3 -c 'import sys,json; m=json.load(sys.stdin)["member"]; print("with username:", sum(1 for d in m if isinstance(d["user"],dict) and d["user"].get("username")), "/", len(m)); print("any @:", any("@" in str(d["user"]) for d in m))'
+```
+
+Expected: `with username` grows as authors log in again, and `any @: False`.
