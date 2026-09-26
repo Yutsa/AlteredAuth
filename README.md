@@ -243,10 +243,10 @@ Print claim **names** only, never values:
 
 ```sh
 # ACCESS_TOKEN = a fresh access token (log out and back in first)
-python3 -c 'import sys,json,base64; p=sys.argv[1].split(".")[1]; d=json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4))); print(sorted(d)); print("pseudo present:", "pseudo" in d, "| pseudo has @:", "@" in str(d.get("pseudo","")))' "$ACCESS_TOKEN"
+python3 -c 'import sys,json,base64; p=sys.argv[1].split(".")[1]; d=json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4))); print(sorted(d)); print("pseudo present:", "pseudo" in d)' "$ACCESS_TOKEN"
 ```
 
-Expected: `pseudo present: True | pseudo has @: False`.
+Expected: `pseudo present: True`.
 
 Then make one authenticated call to the Decks API with that token (for
 example `GET /api/decks?itemsPerPage=1`) so it stores the pseudo, and check the
@@ -254,7 +254,8 @@ public list:
 
 ```sh
 curl -s 'https://decks.alteredcore.org/api/decks/public?itemsPerPage=100' \
-  | python3 -c 'import sys,json; m=json.load(sys.stdin)["member"]; print("with username:", sum(1 for d in m if isinstance(d["user"],dict) and d["user"].get("username")), "/", len(m)); print("any @:", any("@" in str(d["user"]) for d in m))'
+  | python3 -c 'import sys,json; m=json.load(sys.stdin)["member"]; print("with username:", sum(1 for d in m if isinstance(d["user"],dict) and d["user"].get("username")), "/", len(m))'
 ```
 
-Expected: `with username` grows as authors log in again, and `any @: False`.
+Expected: `with username` grows as authors log in again (or all at once after
+`app:users:sync-pseudos` on the Decks API).
