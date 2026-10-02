@@ -257,5 +257,4 @@ curl -s 'https://decks.alteredcore.org/api/decks/public?itemsPerPage=100' \
   | python3 -c 'import sys,json; m=json.load(sys.stdin)["member"]; print("with username:", sum(1 for d in m if isinstance(d["user"],dict) and d["user"].get("username")), "/", len(m))'
 ```
 
-Expected: `with username` grows as authors log in again (or all at once after
-`app:users:sync-pseudos` on the Decks API).
+Expected: `with username` grows as authors log in again.
